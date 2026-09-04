@@ -105,29 +105,34 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "back":
         await show_main_menu(update, context, edit=True)
 
-# ========== ЗАПУСК БОТА В ОТДЕЛЬНОМ ПОТОКЕ ==========
+# ========== FLASK (запускается в отдельном потоке) ==========
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def home():
+    return "Бот работает!"
+
+@flask_app.route('/health')
+def health():
+    return "OK", 200
+
+def run_flask():
+    port = int(os.environ.get("PORT", 5000))
+    flask_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+# ========== ЗАПУСК БОТА (в главном потоке) ==========
 def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("🤖 Бот запущен...")
-    app.run_polling()
-
-# ========== FLASK ДЛЯ RENDER ==========
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Бот работает!"
-
-@app.route('/health')
-def health():
-    return "OK", 200
+    app.run_polling(signal_handlers=False)   # ключевой параметр!
 
 if __name__ == "__main__":
-    # Запускаем бота в фоновом потоке
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.start()
-    # Запускаем Flask-сервер, чтобы Render не ругался
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    # Запускаем Flask в фоновом потоке
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
+    # Бот запускаем в главном потоке
+    run_bot()
