@@ -1,20 +1,22 @@
-mport logging
+import logging
 import random
 import string
 import os
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# ========== ТОКЕН ИЗ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ ==========
+# ========== ТОКЕН ==========
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не задан! Установите переменную окружения.")
+    raise ValueError("BOT_TOKEN не задан!")
 
-ALLOWED_USERS = [1656724625, 1962674968]   # ваш ID и ID друга
+ALLOWED_USERS = [1656724625, 1962674968]
 
 logging.basicConfig(level=logging.INFO)
 
-# ========== ФУНКЦИИ ==========
+# ========== ФУНКЦИИ ГЕНЕРАЦИИ ПАРОЛЯ ==========
 def generate_password(length: int, use_letters: bool, use_digits: bool) -> str:
     chars = ""
     if use_letters:
@@ -30,18 +32,9 @@ def get_main_menu_markup(selected_type: str = None) -> InlineKeyboardMarkup:
     digits_btn = "🔢 Только цифры" + (" ✅" if selected_type == "digits" else "")
     both_btn = "🔤➕🔢 Буквы и цифры" + (" ✅" if selected_type == "both" else "")
     keyboard = [
-        [
-            InlineKeyboardButton(letters_btn, callback_data="letters"),
-            InlineKeyboardButton(digits_btn, callback_data="digits"),
-        ],
-        [
-            InlineKeyboardButton(both_btn, callback_data="both"),
-        ],
-        [
-            InlineKeyboardButton("⚙️ Длина 8", callback_data="len_8"),
-            InlineKeyboardButton("⚙️ Длина 12", callback_data="len_12"),
-            InlineKeyboardButton("⚙️ Длина 16", callback_data="len_16"),
-        ],
+        [InlineKeyboardButton(letters_btn, callback_data="letters"), InlineKeyboardButton(digits_btn, callback_data="digits")],
+        [InlineKeyboardButton(both_btn, callback_data="both")],
+        [InlineKeyboardButton("⚙️ Длина 8", callback_data="len_8"), InlineKeyboardButton("⚙️ Длина 12", callback_data="len_12"), InlineKeyboardButton("⚙️ Длина 16", callback_data="len_16")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -59,7 +52,6 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edi
     else:
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=markup)
 
-# ========== ОБРАБОТЧИКИ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_main_menu(update, context, edit=False)
 
@@ -75,7 +67,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data in ("letters", "digits", "both"):
         context.user_data['selected_type'] = data
         await show_main_menu(update, context, edit=True)
-
     elif data.startswith("len_"):
         length = int(data.split("_")[1])
         context.user_data['length'] = length
@@ -94,7 +85,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
-
     elif data == "new":
         length = context.user_data.get('length', 12)
         selected_type = context.user_data.get('selected_type', 'both')
@@ -112,17 +102,32 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
             reply_markup=reply_markup
         )
-
     elif data == "back":
         await show_main_menu(update, context, edit=True)
 
-# ========== ЗАПУСК ==========
-def main():
+# ========== ЗАПУСК БОТА В ОТДЕЛЬНОМ ПОТОКЕ ==========
+def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    print("🤖 Бот запущен и слушает...")
+    print("🤖 Бот запущен...")
     app.run_polling()
 
+# ========== FLASK ДЛЯ RENDER ==========
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Бот работает!"
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
 if __name__ == "__main__":
-    main()
+    # Запускаем бота в фоновом потоке
+    bot_thread = threading.Thread(target=run_bot)
+    bot_thread.start()
+    # Запускаем Flask-сервер, чтобы Render не ругался
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
