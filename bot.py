@@ -105,7 +105,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "back":
         await show_main_menu(update, context, edit=True)
 
-# ========== FLASK (запускается в отдельном потоке) ==========
+# ========== FLASK (в отдельном потоке) ==========
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -126,7 +126,7 @@ def run_bot():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     print("🤖 Бот запущен...")
-    app.run_polling(signal_handlers=False)   # ключевой параметр!
+    app.run_polling()   # без параметра signal_handlers
 
 if __name__ == "__main__":
     # Запускаем Flask в фоновом потоке
